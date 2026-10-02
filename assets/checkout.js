@@ -2,8 +2,8 @@
  * Woo Pay – Stellar checkout helpers.
  *
  * Beginners: this file runs in the browser on checkout + thank-you pages.
- * It only adds "Copy" buttons and (on thank-you) auto-refreshes every 30s
- * so the customer sees the paid status without manual reloads.
+ * It adds "Copy" buttons and (on thank-you) checks the payment every 30s,
+ * showing the customer a clear message when something is wrong.
  */
 (function () {
   'use strict';
@@ -46,9 +46,59 @@
     }
   });
 
-  // Auto-refresh thank-you page every 30s while order is on-hold.
-  // Server marks it paid via Horizon check; refresh reveals the new status.
-  if (document.querySelector('.woo-pay-instructions')) {
+  // Thank-you page: ask the server every 30s whether the payment arrived and show
+  // its answer in the status box, so the customer knows what is wrong and what to do.
+  var statusBox = document.querySelector('.woo-pay-status');
+  if (!statusBox) return;
+
+  var checkUrl = statusBox.getAttribute('data-check-url');
+  var strings = window.WooPayStellar || {};
+
+  // kind: 'info' (still waiting), 'error' (customer must act), 'message' (paid).
+  function showStatus(text, kind) {
+    statusBox.textContent = text;
+    statusBox.className = 'woo-pay-status woocommerce-' + kind;
+  }
+
+  // Reasons where waiting longer can still fix it. Anything else needs the customer to act.
+  var waitingReasons = { no_payment_found: true, network_error: true };
+
+  function checkAgainLater() {
+    setTimeout(checkPayment, 30000);
+  }
+
+  function checkPayment() {
+    fetch(checkUrl, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.paid) {
+          statusBox.setAttribute('data-state', 'paid');
+          showStatus(data.message || strings.paid || 'Payment received. Thank you!', 'message');
+          // Reload once so the order details above show the new status.
+          setTimeout(function () { window.location.reload(); }, 2000);
+          return;
+        }
+
+        statusBox.setAttribute('data-state', data.reason || 'pending');
+        if (data.message) {
+          showStatus(data.message, waitingReasons[data.reason] ? 'info' : 'error');
+        }
+        // An expired order will not change, so stop asking.
+        if (data.reason !== 'expired') checkAgainLater();
+      })
+      .catch(function () {
+        // Our own site did not answer (offline, server error). Say so and keep trying.
+        showStatus(strings.checkFailed || 'We could not check your payment just now. We will try again shortly.', 'info');
+        checkAgainLater();
+      });
+  }
+
+  if (!checkUrl || statusBox.getAttribute('data-state') === 'paid') return;
+
+  if (window.fetch) {
+    checkPayment();
+  } else {
+    // Very old browser: fall back to a plain reload.
     setTimeout(function () { window.location.reload(); }, 30000);
   }
 })();

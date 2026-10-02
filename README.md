@@ -50,6 +50,24 @@ WordPress/WooCommerce plugin that adds **“Pay with Stellar”** at checkout.
 
 Manual check endpoint (optional): `/wc-api/wc_gateway_stellar?order_id=123` returns `{"paid":true/false}`.
 
+## When a payment is not confirmed
+
+The thank-you page asks that endpoint every 30 seconds and shows the shopper what is wrong and what to do next. Each reason has its own message:
+
+| Reason code | When | Shopper is told to |
+|---|---|---|
+| `no_payment_found` | No payment carries this order's memo yet | Send the exact amount with the memo; contact the shop if already paid |
+| `wrong_amount` | Memo matches, amount is too low | Not send a top-up (one payment per order is matched); contact the shop |
+| `memo_mismatch` | A payment has this order's `WOO-{id}-` prefix but not the exact memo | Not pay again; contact the shop to match it by hand |
+| `wrong_asset` | Memo matches, wrong asset (e.g. USDC sent for an XLM order) | Contact the shop |
+| `expired` | Nothing found and the order is older than the payment window | Place a new order; contact the shop if already paid |
+| `network_error` | Horizon could not be reached | Wait, the page keeps trying; no need to pay again |
+| `order_not_found` | Order missing or not a Stellar order | Contact the shop with the order number |
+
+- The payment window is 60 minutes. Change it with the `woo_pay_stellar_payment_window_minutes` filter (return `0` to never expire). A correct payment that arrives late is still credited.
+- The endpoint adds `reason` and `message` to its JSON only when the order key is passed too (`&key=wc_order_...`), because the message can contain amounts and memos. Without the key it still returns just `paid`.
+- Messages live in `WC_Stellar_Checker::failure_message()`; `WC_Stellar_Checker::check_payment()` returns the reason.
+
 ## Config (.env.example)
 
 This plugin stores settings in WooCommerce options, but `.env.example` documents the same values for staging scripts/CI:
@@ -71,7 +89,7 @@ composer test
 # or: vendor/bin/phpunit --testdox
 ```
 
-Tests live in `tests/StellarUtilsTest.php` and cover memo format/uniqueness, StrKey address validation, XLM/USDC matching.
+Tests live in `tests/StellarUtilsTest.php` (memo format/uniqueness, StrKey address validation, XLM/USDC matching) and `tests/StellarCheckerTest.php` (one test per failure reason and its shopper message).
 
 ## File layout
 
@@ -81,8 +99,9 @@ includes/class-stellar-utils.php         Pure-PHP: memo, address check, matching
 includes/class-wc-stellar-settings.php   Settings defaults + form_fields
 includes/class-wc-gateway-stellar.php    WC_Payment_Gateway: checkout, process_payment, thank-you, checker hook
 includes/class-wc-stellar-checker.php    Horizon API client + mark_order_paid
-assets/checkout.js                       Copy buttons + thank-you auto-refresh
-tests/StellarUtilsTest.php               PHPUnit tests
+assets/checkout.js                       Copy buttons + thank-you payment status messages
+tests/StellarUtilsTest.php               PHPUnit tests (pure helpers)
+tests/StellarCheckerTest.php             PHPUnit tests (failure reasons + messages)
 phpunit.xml / composer.json / tests/bootstrap.php
 .env.example / README.md / CONTRIBUTING.md / LICENSE
 ```
