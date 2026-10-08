@@ -72,7 +72,7 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
         $value = trim((string) $value);
 
         if ($value !== '' && !Stellar_Utils::is_valid_address($value)) {
-            if (function_exists('WC_Admin_Settings::add_error')) {
+            if (method_exists('WC_Admin_Settings', 'add_error')) {
                 \WC_Admin_Settings::add_error(
                     __('Invalid Stellar wallet address. A valid address must start with "G" and contain 56 alphanumeric characters (base32).', 'woo-pay')
                 );
