@@ -186,7 +186,22 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
             esc_html((string) $order_id)
         ) . ' <button type="button" class="button woo-pay-copy-memo">' . esc_html__('Copy memo', 'woo-pay') . '</button></li>';
         echo '<li>' . esc_html__('Payments confirm automatically. This page checks every 30 seconds.', 'woo-pay') . '</li>';
-        echo '</ol></section>';
+        echo '</ol>';
+
+        // Status box: assets/checkout.js polls the check URL and writes the answer here.
+        // The order key in the URL proves the visitor may see this order's payment details.
+        $is_paid   = $order->is_paid();
+        $check_url = add_query_arg(
+            ['order_id' => $order_id, 'key' => $order->get_order_key()],
+            WC()->api_request_url('wc_gateway_stellar')
+        );
+        echo '<div class="woo-pay-status ' . ($is_paid ? 'woocommerce-message' : 'woocommerce-info') . '" role="status" aria-live="polite"'
+            . ' data-state="' . ($is_paid ? 'paid' : 'pending') . '"'
+            . ' data-check-url="' . esc_url($check_url) . '">';
+        echo $is_paid
+            ? esc_html__('Payment received. Thank you!', 'woo-pay')
+            : esc_html__('Waiting for your payment…', 'woo-pay');
+        echo '</div></section>';
     }
 
     /**
@@ -197,39 +212,122 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
      */
     public function check_payment_for_order(int $order_id): bool
     {
+        return $this->get_payment_status($order_id)['paid'];
+    }
+
+    /**
+     * Poll Horizon for this order, mark it paid if found, and explain the result.
+     *
+     * @param int $order_id
+     * @return array{paid:bool,reason:?string,message:string} reason is a Stellar_Utils::REASON_* code when not paid.
+     */
+    public function get_payment_status(int $order_id): array
+    {
         $order = function_exists('wc_get_order') ? wc_get_order($order_id) : null;
         if (!$order) {
-            return false;
+            return $this->failed_status(Stellar_Utils::REASON_ORDER_NOT_FOUND);
         }
+        if ($order->is_paid()) {
+            return $this->paid_status();
+        }
+
         $memo    = (string) $order->get_meta('_stellar_memo');
         $asset   = (string) ($order->get_meta('_stellar_asset') ?: $this->asset);
         $address = (string) ($order->get_meta('_stellar_address') ?: $this->wallet_address);
         $network = (string) ($order->get_meta('_stellar_network') ?: $this->network);
         $amount  = (float) ($order->get_meta('_stellar_expected_amount') ?: $order->get_total());
 
+        // No memo means this order was never sent through "Pay with Stellar".
         if ($memo === '' || $address === '') {
-            return false;
+            return $this->failed_status(Stellar_Utils::REASON_ORDER_NOT_FOUND);
         }
 
         $checker = new WC_Stellar_Checker();
-        $match   = $checker->find_matching_payment($address, $asset, $memo, $amount, $network);
-        if ($match === null) {
+        $result  = $checker->check_payment($address, $asset, $memo, $amount, $network);
+
+        if ($result['paid']) {
+            if ($checker->mark_order_paid($order_id, (array) $result['payment'])) {
+                return $this->paid_status();
+            }
+            return $this->failed_status($checker->get_last_error(), $result['context']);
+        }
+
+        // We look at Horizon first so a late payment is still credited. Only when there is
+        // nothing more specific to say do we tell the shopper the window has closed.
+        $reason  = (string) $result['reason'];
+        $waiting = in_array($reason, [Stellar_Utils::REASON_NO_PAYMENT, Stellar_Utils::REASON_NETWORK_ERROR], true);
+        if ($waiting && $this->is_order_expired($order)) {
+            $reason = Stellar_Utils::REASON_EXPIRED;
+        }
+
+        return $this->failed_status($reason, $result['context']);
+    }
+
+    /**
+     * Has the payment window for this order closed?
+     *
+     * @param WC_Order $order
+     * @return bool
+     */
+    protected function is_order_expired($order): bool
+    {
+        $created = $order->get_date_created();
+        if (!$created) {
             return false;
         }
 
-        return $checker->mark_order_paid($order_id, $match);
+        /**
+         * Minutes an order waits for its Stellar payment. Return 0 to never expire.
+         *
+         * @param int $minutes
+         * @param WC_Order $order
+         */
+        $window = (int) apply_filters('woo_pay_stellar_payment_window_minutes', Stellar_Utils::PAYMENT_WINDOW_MINUTES, $order);
+
+        return Stellar_Utils::is_expired($created->getTimestamp(), time(), $window);
+    }
+
+    /**
+     * @return array{paid:bool,reason:?string,message:string}
+     */
+    private function paid_status(): array
+    {
+        return ['paid' => true, 'reason' => null, 'message' => __('Payment received. Thank you!', 'woo-pay')];
+    }
+
+    /**
+     * @param string $reason A Stellar_Utils::REASON_* code.
+     * @param array<string,string> $context Details for the message.
+     * @return array{paid:bool,reason:?string,message:string}
+     */
+    private function failed_status(string $reason, array $context = []): array
+    {
+        return ['paid' => false, 'reason' => $reason, 'message' => WC_Stellar_Checker::failure_message($reason, $context)];
     }
 
     /**
      * Optional manual callback endpoint: /wc-api/wc_gateway_stellar?order_id=123
      * Lets a button or cron ping the checker without WP-Cron.
+     *
+     * Add &key={order key} to also get "reason" and "message". Without the key we only
+     * say paid true/false, because the message can contain amounts and memos and
+     * anyone can guess an order ID.
      */
     public function maybe_check_via_callback(): void
     {
         $order_id = isset($_GET['order_id']) ? absint($_GET['order_id']) : 0;
         if ($order_id > 0) {
-            $paid = $this->check_payment_for_order($order_id);
-            wp_send_json(['order_id' => $order_id, 'paid' => $paid]);
+            $status   = $this->get_payment_status($order_id);
+            $response = ['order_id' => $order_id, 'paid' => $status['paid']];
+
+            $key   = isset($_GET['key']) ? sanitize_text_field(wp_unslash($_GET['key'])) : '';
+            $order = wc_get_order($order_id);
+            if ($key !== '' && $order && hash_equals((string) $order->get_order_key(), $key)) {
+                $response['reason']  = $status['reason'];
+                $response['message'] = $status['message'];
+            }
+
+            wp_send_json($response);
         }
         wp_send_json(['paid' => false]);
     }
