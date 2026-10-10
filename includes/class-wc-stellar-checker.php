@@ -290,6 +290,22 @@ class WC_Stellar_Checker
         return $this->last_error;
     }
 
+    /** Persist the most recent failed Stellar verification for the shop owner. */
+    public static function record_order_failure($order, string $reason): void
+    {
+        $order->update_meta_data('_stellar_failure_reason', $reason);
+        $order->update_meta_data('_stellar_failure_at', gmdate('c'));
+        $order->save();
+    }
+
+    /** Remove stale failure metadata when a payment is successfully confirmed. */
+    public static function clear_order_failure($order): void
+    {
+        $order->delete_meta_data('_stellar_failure_reason');
+        $order->delete_meta_data('_stellar_failure_at');
+        $order->save();
+    }
+
     /**
      * Mark a WooCommerce order as paid (called when a matching payment is found).
      *
@@ -314,6 +330,7 @@ class WC_Stellar_Checker
 
         // Don't double-pay already-completed orders.
         if ($order->is_paid()) {
+            self::clear_order_failure($order);
             return true;
         }
 
@@ -322,6 +339,8 @@ class WC_Stellar_Checker
         /* translators: %s Stellar transaction hash */
         $order->add_order_note(sprintf(__('Stellar payment confirmed. TX: %s', 'woo-pay'), $tx_hash));
         $order->update_meta_data('_stellar_tx_hash', $tx_hash);
+        $order->delete_meta_data('_stellar_failure_reason');
+        $order->delete_meta_data('_stellar_failure_at');
         $order->save();
 
         return true;

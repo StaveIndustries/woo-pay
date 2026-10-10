@@ -249,7 +249,9 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
             if ($checker->mark_order_paid($order_id, (array) $result['payment'])) {
                 return $this->paid_status();
             }
-            return $this->failed_status($checker->get_last_error(), $result['context']);
+            $reason = $checker->get_last_error();
+            WC_Stellar_Checker::record_order_failure($order, $reason);
+            return $this->failed_status($reason, $result['context']);
         }
 
         // We look at Horizon first so a late payment is still credited. Only when there is
@@ -260,6 +262,7 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
             $reason = Stellar_Utils::REASON_EXPIRED;
         }
 
+        WC_Stellar_Checker::record_order_failure($order, $reason);
         return $this->failed_status($reason, $result['context']);
     }
 
