@@ -106,3 +106,25 @@ function woo_pay_hpos_compat(): void
     }
 }
 add_action('before_woocommerce_init', 'woo_pay_hpos_compat');
+
+/**
+ * Display the saved Stellar failure reason on WooCommerce's order-details page.
+ * Uses order metadata for HPOS compatibility (no direct postmeta queries).
+ */
+function woo_pay_show_order_failure($order): void
+{
+    if (!$order || $order->get_payment_method() !== 'stellar') {
+        return;
+    }
+    $reason = (string) $order->get_meta('_stellar_failure_reason');
+    if ($reason === '') {
+        return;
+    }
+    $at = (string) $order->get_meta('_stellar_failure_at');
+    echo '<div class="woo-pay-order-failure"><p><strong>'
+        . esc_html__('Latest Stellar payment check:', 'woo-pay') . '</strong> '
+        . esc_html($reason)
+        . ($at !== '' ? ' (' . esc_html($at) . ')' : '')
+        . '</p></div>';
+}
+add_action('woocommerce_admin_order_data_after_order_details', 'woo_pay_show_order_failure');

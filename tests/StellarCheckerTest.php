@@ -154,6 +154,28 @@ final class StellarCheckerTest extends TestCase
         $this->assertSame('25.0000000', $match['amount']);
     }
 
+    public function test_failure_reason_and_timestamp_are_persisted_then_cleared(): void
+    {
+        $order = new class {
+            private array $data = [];
+            public int $saves = 0;
+            public function update_meta_data($key, $value): void { $this->data[$key] = $value; }
+            public function get_meta($key) { return $this->data[$key] ?? ''; }
+            public function delete_meta_data($key): void { unset($this->data[$key]); }
+            public function save(): void { ++$this->saves; }
+        };
+
+        WC_Stellar_Checker::record_order_failure($order, Stellar_Utils::REASON_WRONG_AMOUNT);
+        $this->assertSame(Stellar_Utils::REASON_WRONG_AMOUNT, $order->get_meta('_stellar_failure_reason'));
+        $this->assertNotSame('', $order->get_meta('_stellar_failure_at'));
+        $this->assertSame(1, $order->saves);
+
+        WC_Stellar_Checker::clear_order_failure($order);
+        $this->assertSame('', $order->get_meta('_stellar_failure_reason'));
+        $this->assertSame('', $order->get_meta('_stellar_failure_at'));
+        $this->assertSame(2, $order->saves);
+    }
+
     public function test_mark_order_paid_reports_missing_order(): void
     {
         // WooCommerce is not loaded here, so the order cannot be found.
