@@ -75,14 +75,14 @@ class WC_Stellar_Settings
                 'desc_tip'    => true,
             ],
             'network'        => [
-                'title'   => __('Network', 'woo-pay'),
+                'title'   => __('Payment network (Testnet / Mainnet)', 'woo-pay'),
                 'type'    => 'select',
                 'options' => [
                     'testnet' => __('Testnet (for testing)', 'woo-pay'),
                     'public'  => __('Mainnet / Public (real money)', 'woo-pay'),
                 ],
                 'default'     => 'testnet',
-                'description' => __('Use testnet while setting up, then switch to public for live sales.', 'woo-pay'),
+                'description' => __('Testnet uses worthless test tokens. Select Mainnet / Public to accept real Stellar payments.', 'woo-pay'),
                 'desc_tip'    => true,
             ],
             'usdc_issuer'    => [
