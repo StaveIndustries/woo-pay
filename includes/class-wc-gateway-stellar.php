@@ -92,6 +92,7 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
         if ($desc) {
             echo '<p>' . esc_html($desc) . '</p>';
         }
+        $this->render_testnet_warning($this->network);
         echo '<div class="woo-pay-stellar-box" data-asset="' . esc_attr($this->asset) . '">';
         echo '<p><strong>' . esc_html__('Send to:', 'woo-pay') . '</strong> ';
         echo '<code class="woo-pay-address">' . esc_html($this->wallet_address ?: __('(shop wallet not set yet)', 'woo-pay')) . '</code> ';
@@ -101,6 +102,19 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
         echo ' <strong>' . esc_html($this->network) . '</strong></p>';
         echo '<p class="woo-pay-memo-hint">' . esc_html__('You will get a unique memo after placing the order — include it exactly so we can match your payment.', 'woo-pay') . '</p>';
         echo '</div>';
+    }
+
+    /**
+     * Clearly distinguish worthless test payments from real Stellar payments.
+     */
+    private function render_testnet_warning(string $network): void
+    {
+        if ($network !== 'testnet') {
+            return;
+        }
+        echo '<div class="woo-pay-testnet-warning" role="alert">'
+            . esc_html__('Stellar TESTNET — test tokens only. Do not send real XLM or USDC to this payment address.', 'woo-pay')
+            . '</div>';
     }
 
     /**
@@ -172,6 +186,7 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
         $total   = $order->get_total();
 
         echo '<section class="woo-pay-instructions"><h2>' . esc_html__('Pay with Stellar', 'woo-pay') . '</h2>';
+        $this->render_testnet_warning((string) ($order->get_meta('_stellar_network') ?: $this->network));
         echo '<ol>';
         echo '<li>' . sprintf(
             /* translators: 1: amount 2: asset 3: address */

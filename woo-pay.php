@@ -71,6 +71,13 @@ function woo_pay_enqueue_checkout_js(): void
         true
     );
 
+    wp_enqueue_style(
+        'woo-pay-checkout',
+        WOO_PAY_URL . 'assets/checkout.css',
+        [],
+        WOO_PAY_VERSION
+    );
+
     // Pass translated strings to JS.
     wp_localize_script('woo-pay-checkout', 'WooPayStellar', [
         'copied'      => __('Copied!', 'woo-pay'),

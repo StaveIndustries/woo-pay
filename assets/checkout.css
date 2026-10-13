@@ -1,0 +1,16 @@
+.woo-pay-testnet-warning {
+    margin: 1em 0;
+    padding: 0.9em 1em;
+    border: 2px solid #a44b00;
+    border-inline-start-width: 6px;
+    border-radius: 4px;
+    background: #fff3d6;
+    color: #532700;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+.woo-pay-testnet-warning:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
