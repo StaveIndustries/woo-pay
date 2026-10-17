@@ -12,7 +12,10 @@ WordPress/WooCommerce plugin that adds **“Pay with Stellar”** at checkout.
 
 After activating WooCommerce and this plugin, open **WooCommerce → Stellar
 Payments**. The page lists only Stellar gateway orders (20 per page), including
-their expected asset amount, memo and payment state. Waiting/expired open orders
+the amount stored for payment verification, asset, memo and payment state.
+This plugin currently compares the order total numerically to the chosen Stellar
+asset (there is no currency FX conversion); see the payment-matching section.
+Waiting/expired open orders
 have a **Re-check** button to query Horizon again without accepting another
 checkout payment. Already paid, cancelled, failed or refunded orders cannot be
 re-checked from the list.

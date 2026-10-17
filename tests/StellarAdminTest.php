@@ -190,6 +190,49 @@ final class StellarAdminTest extends TestCase
         $this->assertSame([15], $gateway->checked);
     }
 
+    public function test_malformed_query_arrays_do_not_break_admin_rendering(): void
+    {
+        $_GET = ['paged' => ['oops'], 'woo_pay_result' => ['paid']];
+        ob_start();
+        WC_Stellar_Admin::render_page();
+        $html = ob_get_clean();
+        $this->assertStringContainsString('Stellar Payments', $html);
+        $this->assertStringNotContainsString('Payment confirmed on Stellar.', $html);
+        $this->assertSame(1, $GLOBALS['woo_pay_query_args']['page']);
+    }
+
+    public function test_recheck_endpoint_rejects_missing_capability_and_non_post(): void
+    {
+        $GLOBALS['woo_pay_test_authorized'] = false;
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST = ['order_id' => 7];
+        try {
+            WC_Stellar_Admin::handle_recheck();
+            $this->fail('Missing capability must be rejected');
+        } catch (RuntimeException $error) {
+            $this->assertStringContainsString('cannot re-check', $error->getMessage());
+        }
+
+        $GLOBALS['woo_pay_test_authorized'] = true;
+        $_SERVER['REQUEST_METHOD'] = 'GET';
+        try {
+            WC_Stellar_Admin::handle_recheck();
+            $this->fail('GET must be rejected');
+        } catch (RuntimeException $error) {
+            $this->assertStringContainsString('Invalid request method', $error->getMessage());
+        }
+
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST = ['order_id' => [7]];
+        try {
+            WC_Stellar_Admin::handle_recheck();
+            $this->fail('An array order ID must be rejected');
+        } catch (RuntimeException $error) {
+            $this->assertStringContainsString('Invalid order', $error->getMessage());
+        }
+        unset($_SERVER['REQUEST_METHOD']);
+    }
+
     public function test_recheck_fails_closed_when_gateway_is_missing_or_throws(): void
     {
         $order = new WooPayFakeOrder(15);

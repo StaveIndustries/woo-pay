@@ -81,7 +81,9 @@ final class WC_Stellar_Admin
             wp_die(esc_html__('You cannot view Stellar payments.', 'woo-pay'));
         }
 
-        $page = isset($_GET['paged']) ? max(1, absint(wp_unslash($_GET['paged']))) : 1;
+        // Query params can be arrays; never pass them into scalar WP sanitizers.
+        $page = isset($_GET['paged']) && is_scalar($_GET['paged'])
+            ? max(1, absint(wp_unslash($_GET['paged']))) : 1;
         $result = self::get_orders($page);
         $orders = $result && isset($result->orders) && is_array($result->orders)
             ? $result->orders : [];
@@ -90,7 +92,7 @@ final class WC_Stellar_Admin
 
         echo '<div class="wrap"><h1>' . esc_html__('Stellar Payments', 'woo-pay') . '</h1>';
 
-        if (isset($_GET['woo_pay_result'])) {
+        if (isset($_GET['woo_pay_result']) && is_scalar($_GET['woo_pay_result'])) {
             $status = sanitize_key(wp_unslash($_GET['woo_pay_result']));
             $notices = [
                 'paid' => __('Payment confirmed on Stellar.', 'woo-pay'),
@@ -222,7 +224,8 @@ final class WC_Stellar_Admin
             wp_die(esc_html__('Invalid request method.', 'woo-pay'), '', ['response' => 405]);
         }
 
-        $order_id = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+        $order_id = isset($_POST['order_id']) && is_scalar($_POST['order_id'])
+            ? absint(wp_unslash($_POST['order_id'])) : 0;
         if (!$order_id) {
             wp_die(esc_html__('Invalid order.', 'woo-pay'), '', ['response' => 400]);
         }
