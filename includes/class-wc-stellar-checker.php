@@ -13,6 +13,10 @@ if (!class_exists('Stellar_Utils')) {
     require_once __DIR__ . '/class-stellar-utils.php';
 }
 
+if (!class_exists('WC_Stellar_Emails')) {
+    require_once __DIR__ . '/class-wc-stellar-emails.php';
+}
+
 class WC_Stellar_Checker
 {
     /** @var string REASON_* code from the last failed mark_order_paid() call, or '' if it worked. */
@@ -342,6 +346,7 @@ class WC_Stellar_Checker
         $order->delete_meta_data('_stellar_failure_reason');
         $order->delete_meta_data('_stellar_failure_at');
         $order->save();
+        WC_Stellar_Emails::send_confirmation($order, $tx_hash);
 
         return true;
     }

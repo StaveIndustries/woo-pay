@@ -176,6 +176,37 @@ final class StellarCheckerTest extends TestCase
         $this->assertSame(2, $order->saves);
     }
 
+    public function test_confirmation_email_is_idempotent_and_respects_opt_out(): void
+    {
+        if (!function_exists('wp_mail')) {
+            $this->markTestSkipped('wp_mail shim is supplied by tests/bootstrap.php');
+        }
+
+        $order = new class {
+            public array $meta = ['_stellar_asset' => 'XLM'];
+            public function get_meta($key) { return $this->meta[$key] ?? ''; }
+            public function update_meta_data($key, $value): void { $this->meta[$key] = $value; }
+            public function get_order_number() { return '101'; }
+            public function get_total() { return '25'; }
+            public function get_billing_email() { return 'test@example.com'; }
+            public function save(): void {}
+        };
+
+        $GLOBALS['woo_pay_test_settings'] = ['send_confirmation_email' => 'yes'];
+        $GLOBALS['woo_pay_sent_emails'] = [];
+        WC_Stellar_Emails::send_confirmation($order, 'stellar-tx-123');
+        WC_Stellar_Emails::send_confirmation($order, 'stellar-tx-123');
+
+        $this->assertCount(1, $GLOBALS['woo_pay_sent_emails']);
+        $this->assertStringContainsString('25 XLM', $GLOBALS['woo_pay_sent_emails'][0]['body']);
+        $this->assertStringContainsString('stellar-tx-123', $GLOBALS['woo_pay_sent_emails'][0]['body']);
+
+        $GLOBALS['woo_pay_test_settings'] = ['send_confirmation_email' => 'no'];
+        $order->meta['_stellar_customer_confirmation_sent'] = '';
+        WC_Stellar_Emails::send_confirmation($order, 'stellar-tx-456');
+        $this->assertCount(1, $GLOBALS['woo_pay_sent_emails']);
+    }
+
     public function test_mark_order_paid_reports_missing_order(): void
     {
         // WooCommerce is not loaded here, so the order cannot be found.
