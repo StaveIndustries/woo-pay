@@ -92,6 +92,18 @@ class WC_Stellar_Settings
                 'default'     => 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
                 'desc_tip'    => true,
             ],
+            'send_confirmation_email' => [
+                'title'       => __('Confirmation email', 'woo-pay'),
+                'type'        => 'checkbox',
+                'label'       => __('Email the customer when their Stellar payment is confirmed', 'woo-pay'),
+                'default'     => 'yes',
+            ],
+            'send_admin_confirmation' => [
+                'title'       => __('Admin payment email', 'woo-pay'),
+                'type'        => 'checkbox',
+                'label'       => __('Also email the store administrator on Stellar payment confirmation', 'woo-pay'),
+                'default'     => 'no',
+            ],
             'confirmations'  => [
                 'title'       => __('Required payments to check', 'woo-pay'),
                 'type'        => 'number',
