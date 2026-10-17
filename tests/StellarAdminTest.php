@@ -118,8 +118,8 @@ final class StellarAdminTest extends TestCase
 
         $order->status = 'cancelled';
         $this->assertFalse(WC_Stellar_Admin::can_recheck($order));
-        $order->metadata = [];
         $this->assertSame('cancelled', WC_Stellar_Admin::payment_state($order));
+        $order->metadata = [];
         $order->status = 'pending';
         $order->paid = true;
         $this->assertSame('paid', WC_Stellar_Admin::payment_state($order));

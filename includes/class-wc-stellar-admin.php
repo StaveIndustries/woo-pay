@@ -31,13 +31,14 @@ final class WC_Stellar_Admin
             return 'paid';
         }
 
-        if ((string) $order->get_meta('_stellar_failure_reason') === Stellar_Utils::REASON_EXPIRED) {
-            return 'expired';
-        }
-
-        // Refunded and failed orders are no longer awaiting a checkout payment.
+        // A terminal WooCommerce status takes precedence over an older failure
+        // reason, so a cancelled order is never displayed as still expiring.
         if ($order->has_status(['cancelled', 'refunded', 'failed'])) {
             return 'cancelled';
+        }
+
+        if ((string) $order->get_meta('_stellar_failure_reason') === Stellar_Utils::REASON_EXPIRED) {
+            return 'expired';
         }
 
         return 'waiting';
