@@ -135,3 +135,33 @@ function woo_pay_show_order_failure($order): void
         . '</p></div>';
 }
 add_action('woocommerce_admin_order_data_after_order_details', 'woo_pay_show_order_failure');
+
+/**
+ * Filterable WP-Cron schedule for overdue Stellar payment sweeps.
+ * Defaults to 10 minutes; installations can set a minimum of 60 seconds.
+ */
+function woo_pay_stellar_expiry_schedules(array $schedules): array
+{
+    $interval = max(60, (int) apply_filters('woo_pay_stellar_expiry_interval_seconds', 600));
+    $schedules['woo_pay_stellar_expiry'] = [
+        'interval' => $interval,
+        'display' => __('Stellar expiry check', 'woo-pay'),
+    ];
+    return $schedules;
+}
+add_filter('cron_schedules', 'woo_pay_stellar_expiry_schedules');
+
+function woo_pay_schedule_stellar_expiry(): void
+{
+    if (function_exists('WC') && WC() && !wp_next_scheduled('woo_pay_stellar_expire')) {
+        wp_schedule_event(time() + 60, 'woo_pay_stellar_expiry', 'woo_pay_stellar_expire');
+    }
+}
+add_action('init', 'woo_pay_schedule_stellar_expiry');
+add_action('woo_pay_stellar_expire', [WC_Stellar_Checker::class, 'cancel_expired_orders']);
+
+function woo_pay_clear_stellar_expiry_schedule(): void
+{
+    wp_clear_scheduled_hook('woo_pay_stellar_expire');
+}
+register_deactivation_hook(__FILE__, 'woo_pay_clear_stellar_expiry_schedule');
