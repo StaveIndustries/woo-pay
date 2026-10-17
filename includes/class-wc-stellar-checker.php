@@ -307,6 +307,80 @@ class WC_Stellar_Checker
     }
 
     /**
+     * Cancel an overdue unpaid order only after Horizon is successfully checked.
+     *
+     * Failed network calls and already-paid orders must never cause cancellation.
+     * Updating to cancelled triggers WooCommerce's normal stock-restoration hooks.
+     *
+     * @param WC_Order $order
+     */
+    public static function cancel_expired_order($order, WC_Stellar_Checker $checker, int $now): bool
+    {
+        if ($order->get_payment_method() !== 'stellar'
+            || $order->is_paid()
+            || !in_array($order->get_status(), ['pending', 'on-hold'], true)
+        ) {
+            return false;
+        }
+
+        $deadline = (int) $order->get_meta('_stellar_payment_deadline');
+        if ($deadline <= 0 || $deadline > $now) {
+            return false;
+        }
+
+        // Never check or cancel orders without a complete original payment request.
+        $memo = (string) $order->get_meta('_stellar_memo');
+        $address = (string) $order->get_meta('_stellar_address');
+        if ($memo === '' || $address === '') {
+            return false;
+        }
+
+        $asset = (string) ($order->get_meta('_stellar_asset') ?: 'XLM');
+        $network = (string) ($order->get_meta('_stellar_network') ?: 'testnet');
+        $amount = (float) ($order->get_meta('_stellar_expected_amount') ?: $order->get_total());
+        $result = $checker->check_payment($address, $asset, $memo, $amount, $network);
+
+        if ($result['paid']) {
+            // A payment found at the deadline takes priority over cancellation.
+            $checker->mark_order_paid((int) $order->get_id(), (array) $result['payment']);
+            return false;
+        }
+        if ($result['reason'] === Stellar_Utils::REASON_NETWORK_ERROR) {
+            // Horizon being offline is not proof that the customer did not pay.
+            return false;
+        }
+
+        $order->update_status(
+            'cancelled',
+            __('Stellar payment deadline passed; no matching payment was found.', 'woo-pay')
+        );
+        return true;
+    }
+
+    /** Sweep Stellar orders awaiting payment; called by WP-Cron. */
+    public static function cancel_expired_orders(): int
+    {
+        if (!function_exists('wc_get_orders')) {
+            return 0;
+        }
+
+        $orders = wc_get_orders([
+            'payment_method' => 'stellar',
+            'status' => ['pending', 'on-hold'],
+            'limit' => -1,
+        ]);
+        $now = time();
+        $checker = new self();
+        $cancelled = 0;
+        foreach ($orders as $order) {
+            if (self::cancel_expired_order($order, $checker, $now)) {
+                ++$cancelled;
+            }
+        }
+        return $cancelled;
+    }
+
+    /**
      * Mark a WooCommerce order as paid (called when a matching payment is found).
      *
      * @param int $order_id WC order ID.

@@ -150,6 +150,19 @@ class WC_Gateway_Stellar extends WC_Payment_Gateway
         $order->update_meta_data('_stellar_network', $this->network);
         $order->update_meta_data('_stellar_expected_amount', (string) $order->get_total());
 
+        // Share the same configurable payment window as the checkout checker.
+        // A non-positive value disables expiry; legacy orders have no deadline.
+        $window = (int) apply_filters(
+            'woo_pay_stellar_payment_window_minutes',
+            Stellar_Utils::PAYMENT_WINDOW_MINUTES,
+            $order
+        );
+        if ($window > 0) {
+            $order->update_meta_data('_stellar_payment_deadline', time() + $window * MINUTE_IN_SECONDS);
+        } else {
+            $order->delete_meta_data('_stellar_payment_deadline');
+        }
+
         // On-hold until Horizon sees the payment.
         $order->update_status(
             'on-hold',
