@@ -40,6 +40,13 @@ require_once WOO_PAY_DIR . 'includes/class-wc-stellar-settings.php';
 
 // Load the WooCommerce gateway class.
 require_once WOO_PAY_DIR . 'includes/class-wc-gateway-stellar.php';
+// Admin-only order list and nonce-protected manual Horizon re-check.
+if (is_admin()) {
+    require_once WOO_PAY_DIR . 'includes/class-wc-stellar-admin.php';
+    add_action('admin_menu', ['WC_Stellar_Admin', 'register_menu']);
+    add_action('admin_post_woo_pay_stellar_recheck', ['WC_Stellar_Admin', 'handle_recheck']);
+}
+
 
 /**
  * Register the gateway with WooCommerce.
